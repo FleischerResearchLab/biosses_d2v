@@ -1,0 +1,14 @@
+# Virtual environment
+venv
+
+# Data directories
+data
+BIOSSES-Dataset*
+
+# Model directories
+d2v*
+
+# Mischellaneous
+.*
+_*
+!.gitignore
