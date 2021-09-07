@@ -26,8 +26,7 @@ class BIOSSESDataset:
             
             if not os.path.isfile(BIOSSES_PATH):
                 subprocess.run(["wget",
-                                "https://tabilab.cmpe.boun.edu.tr/BIOSSES/Downloads/BIOSSES-Dataset.rar"] 
-                              )
+                                "https://tabilab.cmpe.boun.edu.tr/BIOSSES/Downloads/BIOSSES-Dataset.rar"])
                 subprocess.run(["unrar", "x", "BIOSSES-Dataset.rar"])
                 
             _create_dataframe_from_doc(BIOSSES_PATH)
