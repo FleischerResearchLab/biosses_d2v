@@ -7,7 +7,7 @@ data
 BIOSSES-Dataset*
 
 # Model directories
-d2v*
+biod2v*
 
 # Mischellaneous
 .*

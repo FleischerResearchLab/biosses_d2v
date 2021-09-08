@@ -45,46 +45,36 @@ class BIOSSESDataset:
 
 
 class PMCSubsetCorpus:
-    def __init__(self, stopwords=[], sub_pattern=None, lemma=False):
+    def __init__(self, stopwords=[], sub_pattern=None, use_lemma=False):
         self.sub_pattern = sub_pattern #r"(\s+\(*(([À-ÿA-Za-z\s\-.,;&])+\s\(*(\d{4}[a-z]*)+\)*)+)|(\s+\[[\d\s+,;&\[\]]+\])"
         self.stopwords = stopwords
         self.corpus_paths = []
         self.nlp = None
-        if lemma:
-            self.nlp = spacy.load('en_core_sci_sm', disable=['tok2vec','parser','ner']) 
-
-
-    def __iter__(self):
-        doc_id = 0 
-        for paper_path in self.corpus_paths[:100]:
-            tagged_doc = self._preprocess_doc(paper_path, doc_id)
-            if tagged_doc is not None:
-                yield tagged_doc
-                doc_id += 1
+        if use_lemma:
+            self.nlp = spacy.load("en_core_sci_sm", disable=["parser","ner"]) 
 
 
     def _append_corpus_paths(self, start_path, path_arr):
         for entry in os.scandir(start_path):
-            if not entry.name.startswith('.') \
-              and not entry.name == 'drive' \
-              and not entry.name == 'sample_data' \
+            if not entry.name.startswith(".") \
+              and not entry.name == "drive" \
+              and not entry.name == "sample_data" \
               and entry.is_dir(follow_symlinks=False):
                   self._append_corpus_paths(entry.path, path_arr)
 
-            if not entry.name.startswith('.') and entry.is_file():
+            if not entry.name.startswith(".") and entry.is_file():
                 path_arr.append(entry.path)
 
                 
     def _preprocess_doc(self, path, id):
-        with open(path, 'r', encoding='ascii', errors='ignore') as f:
+        with open(path, "r", encoding="ascii", errors="ignore") as f:
             paper = f.read()
             if self.sub_pattern is not None:
-                paper = re.sub(self.sub_pattern, '', f.read())
-            body = re.search('==== Body(.*)==== Refs', paper, re.DOTALL)
+                paper = re.sub(self.sub_pattern, "", f.read())
+            body = re.search("==== Body(.*)==== Refs", paper, re.DOTALL)
 
             if body is not None:
                 doc = body.group(1).lower().split()
-                print(self.nlp)
                 if self.nlp is not None:
                     doc = " ".join(doc)
                     doc = [token.lemma_ for token in self.nlp(doc) \
@@ -106,42 +96,67 @@ class PMCSubsetCorpus:
             fdir_path = os.path.abspath(fdir)
 
             if not os.path.isdir(fdir_path):
-                run(["mkdir", fdir])
+                os.mkdir(fdir)
                 if not os.path.isfile(os.path.abspath(zname)):
                     run(["wget", PMCSC_URL + zname])
                 run(["tar", "-xf", zname, "-C", fdir])
             
             self._append_corpus_paths(fdir_path, self.corpus_paths)
 
+
+    def get_iterator(self, num_docs):
+        doc_id = 0 
+        for paper_path in self.corpus_paths[:num_docs]:
+            tagged_doc = self._preprocess_doc(paper_path, doc_id)
+            if tagged_doc is not None:
+                yield tagged_doc
+                doc_id += 1
+
     
-    def get_list(self):
+    def get_list(self, num_docs):
         doc_list = []
         doc_id = 0
-
-        for paper_path in self.corpus_paths[:100]:
+        for paper_path in self.corpus_paths[:num_docs]:
             tagged_doc = self._preprocess_doc(paper_path, doc_id)
             if tagged_doc is not None:
                 doc_list.append(tagged_doc)
-                print(tagged_doc)
                 doc_id += 1
         return doc_list
 
 
-def run_doc2vec(lemma=False, logger=False, progress_per=1000, **kwargs):
-    if logger:
-        logging.basicConfig(format="%(asctime)s : %(levelname)s : %(message)s", 
-                            level=logging.INFO)
-    
-    corpus = PMCSubsetCorpus(lemma=lemma)
-    corpus.load()
-    corpus = corpus.get_list()
+def run_doc2vec(use_iterator, use_lemma, use_logger, save_model, progress_per, **kwargs):
+    model_dir = "biod2v_{}lemma_{}iter".format("!" if not use_lemma else "", 
+                                               "!" if not use_iterator else "")
 
-    for key, value in kwargs.items():
-        print("{0} = {1}".format(key, value))
+    if use_logger:
+        if not os.path.isdir(model_dir):
+            os.mkdir(model_dir)
+        logfpath = "{}/{}_log.txt".format(model_dir, model_dir)
+        logging.basicConfig(format="%(asctime)s : %(levelname)s : %(message)s",
+                            level=logging.INFO,
+                            handlers=[
+                                logging.FileHandler(logfpath, mode="a"),
+                                logging.StreamHandler()
+                            ])
+    
+    corpus = PMCSubsetCorpus(use_lemma=use_lemma)
+    corpus.load()
+    if use_iterator:
+        corpus = corpus.get_iterator(10)
+    else:
+        corpus = corpus.get_list(10)
+
+    #for key, value in kwargs.items():
+    #    print("{0} = {1}".format(key, value))
     model = Doc2Vec(**kwargs)
     model.build_vocab(corpus, progress_per=progress_per)
     model.train(corpus, total_examples=model.corpus_count, epochs=model.epochs)
-    #return model
+    if save_model:
+        if not os.path.isdir(model_dir):
+            os.mkdir(model_dir)
+        savefpath = "{}/{}.gsm".format(model_dir, model_dir)
+        model.save(savefpath)
+    return model
 
 
 def main():
@@ -157,7 +172,8 @@ def main():
         "-w", "--window",
         type=int,
         default=5,
-        help="Maximum distance between current and predicted word during training."
+        help="Maximum distance between the current and predicted word \
+              during training."
     )
     parser.add_argument(
         "-a", "--alpha",
@@ -172,9 +188,21 @@ def main():
         help="Minimum frequency of accepted words."
     )
     parser.add_argument(
-        "-l", "--lemma",
+        "-l", "--use_lemma",
         action="store_true",
         help="Whether tokens are turned into lemmas for training."
+    )
+    parser.add_argument(
+        "-p", "--progress_per",
+        type=int,
+        default=1000,
+        help="Number of words processed before showing progress."
+    )
+    parser.add_argument(
+        "-i", "--use_iterator",
+        action="store_true",
+        help="Whether data is streamed in using an iterator or \
+              stored in memory in a list object."
     )
     parser.add_argument(
         "-W", "--workers",
@@ -189,26 +217,27 @@ def main():
         help="Number of iterations trained over the corpus."
     )
     parser.add_argument(
-        "-L", "--logger",
+        "-L", "--use_logger",
         action="store_true",
         help="Whether to show training progress."
     )
     parser.add_argument(
-        "-p", "--progress_per",
-        type=int,
-        default=1000,
-        help="Number of words processed before showing progress."
-    )
+        "-s", "--save_model",
+        action="store_true",
+        help="Whether to save the model weights."
+    )    
     args, unknown = parser.parse_known_args()
-    run_doc2vec(vector_size=args.vector_size, 
+    run_doc2vec(use_iterator=args.use_iterator,
+                use_lemma=args.use_lemma, 
+                use_logger=args.use_logger, 
+                save_model=args.save_model,
+                progress_per=args.progress_per,
+                vector_size=args.vector_size, 
                 window=args.window, 
                 alpha=args.alpha,
                 min_count=args.min_count, 
-                lemma=args.lemma, 
                 workers=args.workers,
-                epochs=args.epochs, 
-                logger=args.logger, 
-                progress_per=args.progress_per)
+                epochs=args.epochs)
 
 
 if __name__ == "__main__":
