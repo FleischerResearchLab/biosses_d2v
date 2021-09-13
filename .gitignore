@@ -2,8 +2,7 @@
 venv
 
 # Data directories
-non_comm_use*
-data
+*comm_use*
 BIOSSES-Dataset*
 
 # Model directories
