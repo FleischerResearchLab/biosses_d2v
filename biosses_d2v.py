@@ -18,14 +18,25 @@ class BIOSSESDataset:
     """
     
     def __init__(self):
-        BIOSSES_URL = "https://tabilab.cmpe.boun.edu.tr/BIOSSES/Downloads/BIOSSES-Dataset.rar"
+        """Downloads BIOSSES data if current directory does not contain it."""
+
         if not os.path.isfile("BIOSSES-Dataset/Annotation-Pairs.docx") \
            or not os.path.isfile("BIOSSES-Dataset/Annotator-Scores.docx"):
-            run(["wget", BIOSSES_URL])
+            run(["wget", "https://tabilab.cmpe.boun.edu.tr/\
+                          BIOSSES/Downloads/BIOSSES-Dataset.rar"])
             run(["unrar", "x", "BIOSSES-Dataset.rar"])
 
 
     def _get_array_from_doc(self, path):
+        """Loads a table from a .doc/docx file into an array.
+      
+        Args: 
+          path: Filepath of the document.
+
+        Returns:
+          Array obtained from the file. 
+        """
+
         from docx import Document
         from numpy import array
 
@@ -36,22 +47,26 @@ class BIOSSESDataset:
         return arr
 
  
-    def get_annotation_pairs(self):
+    def get_sentence_pairs(self):
+        """Gets the BIOSSES sentence pairs for benchmarking."""
+
         sent_arr = self._get_array_from_doc("BIOSSES-Dataset/Annotation-Pairs.docx")
         return sent_arr[1:,1:]
 
     
     def get_annotator_scores(self):
+        """Gets the BIOSSES similarity scores by expert annotators."""
+
         score_arr = self._get_array_from_doc("BIOSSES-Dataset/Annotator-Scores.docx")
         return score_arr[1:,1:].astype("i1")
 
 
 class PMCOASubsetCorpus:
     """
-    Corpus iterator class for the PMC Open Access (PMCOA) Subset in plain text.
-    The PMCOA Subset is a corpus of select PubMed Central articles made free for 
+    Corpus iterator for the PMC Open Access (PMCOA) Subset in plain text form.
+    PMCOA Subset is a corpus of select PubMed Central articles made free for 
     research purposes and is accessible via FTP server (ftp://ftp.ncbi.nlm.nih.gov/pub/pmc).
-    This class iterates such text data through the oa_bulk directory, from
+    The iterator generates such text data through the oa_bulk directory, from
     both usage groups: commercial and non-commercial use.
     Source: https://www.ncbi.nlm.nih.gov/pmc/tools/ftp/.
     """
@@ -61,21 +76,34 @@ class PMCOASubsetCorpus:
                  lemma=False, 
                  stopwords=[], 
                  sub_pattern=None):
+        """Loads user-defined corpus packages.
+        User can determine the number of articles from all or any combination 
+        of the following packages: 0-9A-B, C-H, I-N, O-Z.
+        Preprocessing is optional in the following ways:
+          - lemmatization
+          - stopword removal
+          - regex substitution
+        """
+
         self.packages = packages
         self.size = size
         self.lemma = lemma
         self.stopwords = stopwords
         self.sub_pattern = sub_pattern
-        self.corpus_paths = self._load()
         # Could try r"(\s+\(*(([À-ÿA-Za-z\s\-.,;&])+\s\(*(\d{4}[a-z]*)+\)*)+)|(\s+\[[\d\s+,;&\[\]]+\])"
         # for getting rid of majority of in-text citations
-        
+        self.corpus_paths = self._load()
+
 
     def __iter__(self):
+        """Enables users to treat this object as an iterable."""
+
         return self._iterator()
 
 
     def _iterator(self):
+        """Creates a generator of preprocessed articles from the PMCOA Subset."""
+
         doc_id = 0
         while doc_id < self.size:
             tagged_doc = self._preprocess_doc(self.corpus_paths[doc_id], doc_id)
@@ -85,6 +113,17 @@ class PMCOASubsetCorpus:
 
                 
     def _preprocess_doc(self, path, id):
+        """Tokenizes text from a file.
+        
+        Args:
+          path: Filepath of the article to be preprocessed.
+          id: Article ID number required for training Doc2Vec.
+        
+        Returns:
+          Tokens in the form of a TaggedDocument,
+          following Doc2Vec's training protocol.
+        """
+
         with open(path, "r", encoding="ascii", errors="ignore") as f:
             paper = f.read()
             if self.sub_pattern is not None:
@@ -104,28 +143,39 @@ class PMCOASubsetCorpus:
 
 
     def _append_corpus_paths(self, start_path, path_arr):
+        """Recursively scans and appends paths of all .txt files 
+        from a directory and its subdirectories, if any, to a provided array. 
+
+        Args:
+          start_path: Directory path to be scanned for .txt files.
+          path_arr: Array to append all the .txt paths.
+        """
+
         for entry in os.scandir(start_path):
             if not entry.name.startswith(".") \
-               and not entry.name.startswith("_") \
                and entry.is_dir(follow_symlinks=False):
-                  self._append_corpus_paths(entry.path, path_arr)
+                self._append_corpus_paths(entry.path, path_arr)
 
-            if not entry.name.startswith(".") and entry.is_file():
+            if entry.name.endswith(".txt"):
                 path_arr.append(entry.path)
 
 
     def _load(self):
+        """Downloads the zipped corpus folders and unzips
+        them if they are not already available in the current directory.
+        Then loads individual filepaths of all .txt files into 
+        an internal array, necessary for the iterator later.
+        """
+
         if self.lemma:
             import spacy        
             self.nlp = spacy.load(name="en_core_sci_sm", 
                                   disable=["parser","ner"])
         corpus_paths = []
-        zipnames = []
-        dirnames = []
 
-        for subset in self.packages:
-            zipnames.append("non_comm_use." + subset + ".txt.tar.gz")
-            zipnames.append("comm_use." + subset + ".txt.tar.gz")
+        for package in self.packages:
+            zipnames = ["non_comm_use." + package + ".txt.tar.gz",
+                        "comm_use." + package + ".txt.tar.gz"]
             
             for zname in zipnames:
                 dirname = zname.replace(".txt.tar.gz", "")
@@ -143,12 +193,15 @@ class PMCOASubsetCorpus:
 
 class Doc2VecRunner:
     """
-    Runner class to train a Doc2Vec model from the Gensim library on a corpus.
+    Runner to train Doc2Vec from the Gensim library on a corpus.
     This is just an abstraction to streamline Doc2Vec's configurations.
     It enables training logs and model saving if need be. 
     Doc2Vec's documentation: https://radimrehurek.com/gensim/models/doc2vec.html.
     """
+
     def __init__(self, corpus=None, **kwargs):
+        """Initializes internal model and corpus"""
+
         self.model = Doc2Vec(**kwargs)
         self.corpus = corpus
 
@@ -157,6 +210,8 @@ class Doc2VecRunner:
             use_logger=False, 
             log_dir=None, 
             progress_per=None):
+        """Trains the Doc2Vec model, with optional progress logging"""
+
         if use_logger:
             import logging
             log_dir = "model" if log_dir is None else log_dir
@@ -185,6 +240,8 @@ class Doc2VecRunner:
 
 
     def save_model(self, model_dir=None):
+        """Saves model's internal weights to directory"""
+
         model_dir = "model" if model_dir is None else model_dir
         model_fname = "{}.gsm".format(model_dir)
         if not os.path.isdir(model_dir):
@@ -205,7 +262,13 @@ def run_doc2vec(iterator,
                 corpus_size, 
                 progress_per, 
                 **kwargs):
-    corpus = PMCOASubsetCorpus(packages=package_names, size=corpus_size, lemma=lemma)
+    """Program to run based on CLI arguments.
+    Helps train a configurable Doc2Vec model on a configurable corpus.
+    If the model is saved, the default saving directory is determined 
+    based on whether lemmatization or data iteration is enabled.
+    """
+
+    corpus = PMCOASubsetCorpus(packages=package_names, size=1000, lemma=lemma)
     corpus = list(corpus) if not iterator else corpus
 
     model_dir = "biod2v_{}lemma_{}iter".format("!" if not lemma else "", 
@@ -217,7 +280,11 @@ def run_doc2vec(iterator,
 
 
 def main():
-
+    """
+    Parsing arguments to power Doc2Vec with the PMCOA Subset corpus
+    if user wants to use this module in the CLI.
+    """    
+    
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument(
