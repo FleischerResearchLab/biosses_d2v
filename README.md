@@ -1,15 +1,38 @@
-# biosses-doc2vec
-## Introduction:
-**biosses-doc2vec** is a streamlined module to benchmark the BIOSSES dataset with a configurable Doc2Vec (Paragraph Vector) model.
+# biosses-doc2vec: Benchmarking the BIOSSES dataset streamlined!
 
-BIOSSES is short for [Biomedical Semantic Similarity Estimation System](https://tabilab.cmpe.boun.edu.tr/BIOSSES/), a series of methods, including supervised and ontology-based ones (utilizing WordNet and UMLS), to assess similarity between biomedical sentences proposed by [Soğancıoğlu et al. (2017)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5870675/). Each method in the original BIOSSES was devised such that similarity scores are computed and benchmarked with gold standard scores in terms of the Pearson correlation metric.
+## What is BIOSSES?
 
-The dataset in question is a collection of 100 sentence pairs picked from the [TAC 2014 Biomedical Summarization Track Dataset](https://tac.nist.gov/2014/BiomedSumm/) related to biomedical literature only. Similarity between each sentence pair has been judged, assigned integer scores by 5 human expert annotators and also included along with the [sentences](https://tabilab.cmpe.boun.edu.tr/BIOSSES/DataSet.html). 
+BIOSSES is short for [Biomedical Semantic Similarity Estimation System](https://tabilab.cmpe.boun.edu.tr/BIOSSES/), a series of methods to assess similarity between biomedical sentences proposed by [Soğancıoğlu et al. (2017)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5870675/). Each method in the original BIOSSES produces their own similarity scores and are then benchmarked in terms of the Pearson correlation metric.
 
-The **biosses-doc2vec** module implements the paragraph vector ([Le & Mikolov, 2014](https://arxiv.org/pdf/1405.4053.pdf)) approach to the benchmark, which was mentioned in the BIOSSES paper. To date, Doc2Vec (Gensim) is the only popular open-source realization of the paragraph vector in Python and hence used as the sole model architecture in this module. Doc2Vec is made configurable with regard to parameters including but definitely not limited to vector size, minimum count of words, alpha rate, etc. (see [documentation](https://radimrehurek.com/gensim/models/doc2vec.html)) Since BIOSSES trained the paragraph vectors on a subset of a subset (called Open Access Subset) of publicly available PubMed Central text data (~4GB, ~37K articles), **biosses-doc2vec** does the same and more. This module allows users to download bulk Open Access packages of their own choosing and pool in any number of articles also of their own choosing. From there, users can opt to use the corpus, lemmatized or not, as an iterator or a list based on their memory and time constraints. There is also an option to run all the training and benchmarking with just one line in the CLI.  
+The benchmark dataset is a collection of 100 biomedical sentence pairs picked from the [TAC 2014 Biomedical Summarization Track Dataset](https://tac.nist.gov/2014/BiomedSumm/). Similarity between each sentence pair has been assigned integer scores by 5 human expert annotators and included along with the [sentences](https://tabilab.cmpe.boun.edu.tr/BIOSSES/DataSet.html). 
 
-## Classes:
-### 1. BIOSSESDataset:
-This class represents the BIOSSES dataset itself, starting with enabling users to download and handle biomedical sentence pairs and gold standard annotator scores as 2 separate DataFrames. 
-The sentences and scores are stored in tables in Microsoft Word files so [**python-docx**](https://pypi.org/project/python-docx/) was used to parse data from those files. **BIOSSESDataset** also does the benchmarking if the following are supplied: (1) the model, (2) whether the corpus was lemmatized and (3) stopwords removed during training. 
+## What does **biosses-doc2vec** do?
 
+**biosses-doc2vec** implements the paragraph vector approach ([Le & Mikolov, 2014](https://arxiv.org/pdf/1405.4053.pdf)) to  benchmarking BIOSSES sentences. 
+
+**biosses-doc2vec** uses the Doc2Vec model library from Gensim as it is the only popular open-source implementation of the paragraph vector model in Python as of now ([documentation](https://radimrehurek.com/gensim/models/doc2vec.html)).
+
+**biosses-doc2vec** also implements the training corpus for Doc2Vec –– PubMed Central articles in the Open Access Subset part of which the original BIOSSES's paragraph vectors were trained on. Different levels of granularity are available via a FTP server to download these articles (see [this](https://www.ncbi.nlm.nih.gov/pmc/tools/ftp/)). 
+  - **biosses-doc2vec** allows bulk downloads (i.e. not by individual articles) of Commercial and Non-Commercial packages only. 
+  
+Finally, **`biosses-doc2vec.py`** can be used in the CLI to execute both the training and benchmarking in just one line.
+
+## What are the classes in **biosses-doc2vec** for?
+
+### **BIOSSESDataset**:
+
+Enables downloading and converting biomedical sentence pair and annotator score tables into 2 separate DataFrames. 
+
+Benchmarks a Doc2Vec model via `benchmark_with_d2v` with the Pearson correlation metric.
+
+### **PMCOASubsetCorpus**:
+
+Downloads a corpus that can be either part or all of the PubMed Central Open Access Subset. 
+  - Since corpus bulk directories are named after the alphanumeric grouping of journal titles they contain, users can specify by passing to `packages` an iterable of any combination of the following groupings: `0-9A-B` **(default)**, `C-H`, `I-N`, `O-Z`.
+
+  - Users can also choose the exact number of articles to be loaded into the resulting corpus, along with options of lemmatization and turning it into an iterator or a list in memory. 
+
+### **Doc2VecRunner**:
+
+An abstraction to streamline training Doc2Vec on a particular corpus. 
+  - `**kwargs` refers to any parameters passed into the instantiation of Doc2Vec [here](https://radimrehurek.com/gensim/models/doc2vec.html#gensim.models.doc2vec.Doc2Vec), **except** `documents` and `corpus_file`.
