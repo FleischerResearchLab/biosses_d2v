@@ -2,6 +2,154 @@ import os
 from subprocess import run
 
 
+class PMCOASubsetCorpus:
+    """
+    Corpus iterator for the PMC Open Access (PMCOA) Subset in plain text form.
+    PMCOA Subset is a corpus of select PubMed Central articles made free for 
+    research purposes and is accessible via FTP server (ftp://ftp.ncbi.nlm.nih.gov/pub/pmc).
+    The iterator generates such text data through the oa_bulk directory, from
+    both usage groups: commercial and non-commercial use.
+    Source: https://www.ncbi.nlm.nih.gov/pmc/tools/ftp/.
+    """
+
+    import re
+    import spacy
+    import smart_open
+    from gensim.models.doc2vec import TaggedDocument
+
+    def __init__(self,
+                 packages=["0-9A-B"],
+                 size=float("inf"),
+                 lemma=False,
+                 stopwords=[],
+                 re_pattern=None):
+        """Loads user-defined corpus packages.
+        User can determine the number of articles from all or any combination 
+        of the following packages: 0-9A-B, C-H, I-N, O-Z.
+        Preprocessing is optional in the following ways:
+          - lemmatization
+          - stopword removal
+          - regex removal
+        """
+
+        self.packages = packages
+        self.size = size
+        self.lemma = lemma
+        self.stopwords = stopwords
+        self.re_pattern = re_pattern
+        self.paths = self._load()
+        self.nlp = self.spacy.load(
+            name="en_core_sci_sm", disable=["parser", "ner"])
+
+    def __iter__(self):
+        """Enables users to treat this object as an iterator."""
+
+        return self._iterator()
+
+    def _iterator(self):
+        """Generator function for iterating over preprocessed PMCOA articles."""
+
+        doc_id = 0
+        for paper_path in self.paths:
+            tagged_doc = self._preprocess_doc(paper_path, doc_id)
+            if tagged_doc is not None:
+                yield tagged_doc
+                doc_id += 1
+                if doc_id == self.size:
+                    break
+
+    def _preprocess_doc(self, path, id):
+        """Tokenizes text from a file.
+
+        Args:
+          path: Filepath of the article to be preprocessed.
+          id: Article ID number required for training Doc2Vec.
+
+        Returns:
+          Tokens in the form of a TaggedDocument,
+          following Doc2Vec's training protocol.
+        """
+
+        with self.smart_open.open(path, "r", encoding="ascii", errors="ignore") as f:
+            paper = f.read()
+            if self.re_pattern is not None:
+                paper = self.re.sub(self.re_pattern, "", paper)
+            body = self.re.search(
+                "==== Body(.*)==== Refs", paper, self.re.DOTALL)
+
+            if body is not None:
+                doc = body.group(1).lower().split()
+                if self.lemma:
+                    doc = " ".join(doc)
+                    doc = [token.lemma_ for token in self.nlp(doc)
+                           if not token in self.stopwords]
+                else:
+                    doc = [token for token in doc
+                           if not token in self.stopwords]
+                return self.TaggedDocument(doc, [id])
+
+    def _append_corpus_paths(self, start_path, path_arr):
+        """Recursively scans and appends paths of all .txt files 
+        in a directory and its subdirectories, if any, to a provided array. 
+
+        Args:
+          start_path: Directory path to be scanned for .txt files.
+          path_arr: Array to append all the .txt paths.
+        """
+
+        for entry in os.scandir(start_path):
+            if not entry.name.startswith(".") \
+               and entry.is_dir(follow_symlinks=False):
+                self._append_corpus_paths(entry.path, path_arr)
+
+            if entry.name.endswith(".txt"):
+                path_arr.append(entry.path)
+
+    def _load(self):
+        """Downloads the zipped packages and unzips them 
+        if they are not already available in the current directory.
+        Then loads individual filepaths of all .txt files into 
+        an internal array, necessary for the iterator later.
+        """
+
+        paths = []
+
+        for package in self.packages:
+            zipnames = ["non_comm_use." + package + ".txt.tar.gz",
+                        "comm_use." + package + ".txt.tar.gz"]
+
+            for zname in zipnames:
+                dirname = zname.replace(".txt.tar.gz", "")
+                if not os.path.isdir(dirname):
+                    os.mkdir(dirname)
+                    if not os.path.isfile(zname):
+                        run(["wget",
+                            "ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/"
+                             + zname])
+                    run(["tar", "-xf", zname, "-C", dirname])
+                self._append_corpus_paths(dirname, paths)
+
+        return paths
+
+    def get_list(self):
+        """Returns an array of preprocessed PMCOA articles.
+        May be time- and memory-consuming if specified size is large (>10000).
+        Please critically consider RAM availability before using.
+        """
+
+        doc_list = []
+        doc_id = 0
+        for paper_path in self.paths:
+            tagged_doc = self._preprocess_doc(paper_path, doc_id)
+            if tagged_doc is not None:
+                doc_list.append(tagged_doc)
+                doc_id += 1
+                if doc_id == self.size:
+                    break
+
+        return doc_list
+
+
 class BIOSSESDataset:
     """
     Dataset class for the BIOSSES Benchmark.
@@ -94,151 +242,6 @@ class BIOSSESDataset:
         corr, _ = pearsonr(avg_real_scores, d2v_scores)
 
         return corr, d2v_scores
-
-
-class PMCOASubsetCorpus:
-    """
-    Corpus iterator for the PMC Open Access (PMCOA) Subset in plain text form.
-    PMCOA Subset is a corpus of select PubMed Central articles made free for 
-    research purposes and is accessible via FTP server (ftp://ftp.ncbi.nlm.nih.gov/pub/pmc).
-    The iterator generates such text data through the oa_bulk directory, from
-    both usage groups: commercial and non-commercial use.
-    Source: https://www.ncbi.nlm.nih.gov/pmc/tools/ftp/.
-    """
-
-    import re
-    import spacy
-    import smart_open
-    from gensim.models.doc2vec import TaggedDocument
-
-    def __init__(self,
-                 packages=["0-9A-B"],
-                 size=float("inf"),
-                 lemma=False,
-                 stopwords=[],
-                 sub_pattern=None):
-        """Loads user-defined corpus packages.
-        User can determine the number of articles from all or any combination 
-        of the following packages: 0-9A-B, C-H, I-N, O-Z.
-        Preprocessing is optional in the following ways:
-          - lemmatization
-          - stopword removal
-          - regex substitution
-        """
-
-        self.packages = packages
-        self.size = size
-        self.lemma = lemma
-        self.stopwords = stopwords
-        self.sub_pattern = sub_pattern
-        # Could try r"(\s+\(*(([À-ÿA-Za-z\s\-.,;&])+\s\(*(\d{4}[a-z]*)+\)*)+)|(\s+\[[\d\s+,;&\[\]]+\])"
-        # for getting rid of majority of in-text citations
-        self.corpus_paths = self._load()
-        self.nlp = self.spacy.load(
-            name="en_core_sci_sm", disable=["parser", "ner"])
-
-    def __iter__(self):
-        """Enables users to treat this object as an iterable."""
-
-        return self._iterator()
-
-    def _iterator(self):
-        """Creates a generator of preprocessed articles from the PMCOA Subset."""
-
-        doc_id = 0
-        for paper_path in self.corpus_paths:
-            tagged_doc = self._preprocess_doc(paper_path, doc_id)
-            if tagged_doc is not None:
-                yield tagged_doc
-                doc_id += 1
-                if doc_id == self.size:
-                    break
-
-    def _preprocess_doc(self, path, id):
-        """Tokenizes text from a file.
-
-        Args:
-          path: Filepath of the article to be preprocessed.
-          id: Article ID number required for training Doc2Vec.
-
-        Returns:
-          Tokens in the form of a TaggedDocument,
-          following Doc2Vec's training protocol.
-        """
-
-        with self.smart_open.open(path, "r", encoding="ascii", errors="ignore") as f:
-            paper = f.read()
-            if self.sub_pattern is not None:
-                paper = self.re.sub(self.sub_pattern, "", paper)
-            body = self.re.search(
-                "==== Body(.*)==== Refs", paper, self.re.DOTALL)
-
-            if body is not None:
-                doc = body.group(1).lower().split()
-                if self.lemma:
-                    doc = " ".join(doc)
-                    doc = [token.lemma_ for token in self.nlp(doc)
-                           if not token in self.stopwords]
-                else:
-                    doc = [token for token in doc
-                           if not token in self.stopwords]
-                return self.TaggedDocument(doc, [id])
-
-    def _append_corpus_paths(self, start_path, path_arr):
-        """Recursively scans and appends paths of all .txt files 
-        from a directory and its subdirectories, if any, to a provided array. 
-
-        Args:
-          start_path: Directory path to be scanned for .txt files.
-          path_arr: Array to append all the .txt paths.
-        """
-
-        for entry in os.scandir(start_path):
-            if not entry.name.startswith(".") \
-               and entry.is_dir(follow_symlinks=False):
-                self._append_corpus_paths(entry.path, path_arr)
-
-            if entry.name.endswith(".txt"):
-                path_arr.append(entry.path)
-
-    def _load(self):
-        """Downloads the zipped corpus folders and unzips
-        them if they are not already available in the current directory.
-        Then loads individual filepaths of all .txt files into 
-        an internal array, necessary for the iterator later.
-        """
-
-        corpus_paths = []
-
-        for package in self.packages:
-            zipnames = ["non_comm_use." + package + ".txt.tar.gz",
-                        "comm_use." + package + ".txt.tar.gz"]
-
-            for zname in zipnames:
-                dirname = zname.replace(".txt.tar.gz", "")
-                if not os.path.isdir(dirname):
-                    os.mkdir(dirname)
-                    if not os.path.isfile(zname):
-                        run(["wget",
-                            "ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/"
-                             + zname])
-                    run(["tar", "-xf", zname, "-C", dirname])
-                self._append_corpus_paths(dirname, corpus_paths)
-
-        return corpus_paths
-
-    def get_list(self):
-        doc_list = []
-        doc_id = 0
-        for paper_path in self.corpus_paths:
-            tagged_doc = self._preprocess_doc(paper_path, doc_id)
-            if tagged_doc is not None:
-                doc_list.append(tagged_doc)
-                doc_id += 1
-                if doc_id == self.size:
-                    break
-
-        return doc_list
 
 
 class Doc2VecRunner:
