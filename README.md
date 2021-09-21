@@ -4,7 +4,7 @@
 
 BIOSSES is short for [Biomedical Semantic Similarity Estimation System](https://tabilab.cmpe.boun.edu.tr/BIOSSES/), a series of methods to assess similarity between biomedical sentences proposed by [Soğancıoğlu et al. (2017)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5870675/). Each method in the original BIOSSES produces their own similarity scores and are then benchmarked in terms of the Pearson correlation metric.
 
-The benchmark dataset is a collection of 100 biomedical sentence pairs picked from the [TAC 2014 Biomedical Summarization Track Dataset](https://tac.nist.gov/2014/BiomedSumm/). Similarity between each sentence pair has been assigned integer scores by 5 human expert annotators and included along with the [sentences](https://tabilab.cmpe.boun.edu.tr/BIOSSES/DataSet.html). 
+The benchmark dataset is a table of 100 biomedical sentence pairs picked from the [TAC 2014 Biomedical Summarization Track Dataset](https://tac.nist.gov/2014/BiomedSumm/). Each sentence pair has been assigned integer similarity scores by 5 human expert annotators which are included in another table along with the [sentences](https://tabilab.cmpe.boun.edu.tr/BIOSSES/DataSet.html). 
 
 ## What does **biosses-doc2vec** do?
 
@@ -36,3 +36,18 @@ Downloads a corpus that can be either part or all of the PubMed Central Open Acc
 
 An abstraction to streamline training Doc2Vec on a particular corpus. 
   - `**kwargs` refers to any parameters passed into the instantiation of Doc2Vec [here](https://radimrehurek.com/gensim/models/doc2vec.html#gensim.models.doc2vec.Doc2Vec), **except** `documents` and `corpus_file`.
+
+## Requirements:
+
+It is recommended that a virtual environment be created and activated before installing any required libraries:
+
+```python
+python3 -m venv venv
+source venv/bin/activate
+```
+
+Then install the requirements as follows:
+
+```python
+pip install -r requirements.txt
+```
