@@ -49,9 +49,12 @@ class PMCOASubsetCorpus:
     def _iterator(self):
         """Generator function for iterating over preprocessed PMCOA articles."""
 
+        # doc_id is needed since Doc2Vec requires every document to have a unique id
         doc_id = 0
         for paper_path in self.paths:
             tagged_doc = self._preprocess_doc(paper_path, doc_id)
+            # this check is for when _preprocess_doc returns None
+            # if there's no body text in some papers
             if tagged_doc is not None:
                 yield tagged_doc
                 doc_id += 1
@@ -72,13 +75,16 @@ class PMCOASubsetCorpus:
 
         with self.smart_open.open(path, "r", encoding="ascii", errors="ignore") as f:
             paper = f.read()
+            # only works if a regex pattern was supplied during instantiation
             if self.re_pattern is not None:
                 paper = self.re.sub(self.re_pattern, "", paper)
+            # searches for body text between these tags
             body = self.re.search(
                 "==== Body(.*)==== Refs", paper, self.re.DOTALL)
 
             if body is not None:
                 doc = body.group(1).lower().split()
+                # tokenizes and/or lemmatizes using spacy's default lemmatizer
                 if self.lemma:
                     doc = " ".join(doc)
                     doc = [token.lemma_ for token in self.nlp(doc)
@@ -98,6 +104,7 @@ class PMCOASubsetCorpus:
         """
 
         for entry in os.scandir(start_path):
+            # occasionally, hidden (unwanted) directories start with .
             if not entry.name.startswith(".") \
                and entry.is_dir(follow_symlinks=False):
                 self._append_corpus_paths(entry.path, path_arr)
@@ -115,6 +122,8 @@ class PMCOASubsetCorpus:
         paths = []
 
         for package in self.packages:
+            # downloads both non-commercial and commercial packages
+            # as per research use
             zipnames = ["non_comm_use." + package + ".txt.tar.gz",
                         "comm_use." + package + ".txt.tar.gz"]
 
@@ -123,20 +132,23 @@ class PMCOASubsetCorpus:
                 if not os.path.isdir(dirname):
                     os.mkdir(dirname)
                     if not os.path.isfile(zname):
+                        # downloads zipped packages via the FTP server
                         run(["wget",
                             "ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/"
                              + zname])
+                    # unzips if not already
                     run(["tar", "-xf", zname, "-C", dirname])
                 self._append_corpus_paths(dirname, paths)
 
         return paths
 
     def get_list(self):
-        """Returns an array of preprocessed PMCOA articles.
+        """Returns an array of preprocessed PMCOA articles in memory.
         May be time- and memory-consuming if specified size is large (>10000).
         Please critically consider RAM availability before using.
         """
 
+        # similar syntax to the generator function above
         doc_list = []
         doc_id = 0
         for paper_path in self.paths:
@@ -172,6 +184,7 @@ class BIOSSESDataset:
 
         if not os.path.isfile("BIOSSES-Dataset/Annotation-Pairs.docx") \
            or not os.path.isfile("BIOSSES-Dataset/Annotator-Scores.docx"):
+            # downloads and unzips if the BIOSSES dataset is not found
             run(["wget", "https://tabilab.cmpe.boun.edu.tr/\
                           BIOSSES/Downloads/BIOSSES-Dataset.rar"])
             run(["unrar", "x", "BIOSSES-Dataset.rar"])
@@ -188,6 +201,7 @@ class BIOSSESDataset:
 
         doc = self.docx.Document(path)
         table = doc.tables[0]
+        # gets text from the cells from the rows
         df = self.DataFrame([[cell.text.strip() for cell in row.cells]
                              for row in table.rows])
         return df
@@ -197,8 +211,8 @@ class BIOSSESDataset:
 
         sent_df = self._get_df_from_doc(
             "BIOSSES-Dataset/Annotation-Pairs.docx")
-        return sent_df.iloc[1:, 1:].rename(columns={1: "Sentence_1",
-                                                    2: "Sentence_2"})
+        return sent_df.iloc[1:, 1:].rename(
+            columns={1: "Sentence_1", 2: "Sentence_2"})
 
     def get_score_df(self):
         """Gets the BIOSSES similarity scores by expert annotators."""
@@ -230,6 +244,8 @@ class BIOSSESDataset:
             tokens1 = preprocess(sent1)
             tokens2 = preprocess(sent2)
             d2v_model.random.seed(0)
+            # cosine similarity is the typical choice to measure
+            # closeness between 2 entities in embedding space
             return 1 - cosine(d2v_model.infer_vector(tokens1),
                               d2v_model.infer_vector(tokens2))
 
@@ -268,6 +284,7 @@ class Doc2VecRunner:
         """Trains the Doc2Vec model, with optional progress logging"""
 
         if use_logger:
+            # creates default directory if directory for logging was not supplied
             log_dir = "model" if log_dir is None else log_dir
             log_fname = "{}.log".format(log_dir)
             if not os.path.isdir(log_dir):
@@ -295,6 +312,7 @@ class Doc2VecRunner:
     def save_model(self, model_dir=None):
         """Saves model's internal weights to a directory"""
 
+        # creates default directory if directory for saving was not supplied
         model_dir = "model" if model_dir is None else model_dir
         model_fname = "{}.gsm".format(model_dir)
         if not os.path.isdir(model_dir):
@@ -322,6 +340,8 @@ def run_doc2vec(iterator,
     if not iterator:
         corpus = corpus.get_list()
 
+    # to make it interpretable in CLI mode, model's directory name is
+    # based on whether the corpus is an iterator and/or lemmatized
     model_dir = "biod2v_{}lemma_{}iter".format(
         "!" if not lemma else "", "!" if not iterator else "")
     runner = Doc2VecRunner(corpus, **kwargs)

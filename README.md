@@ -1,4 +1,4 @@
-# biosses-doc2vec: Benchmarking the BIOSSES dataset with Doc2Vec streamlined!
+# biosses_d2v: Benchmarking the BIOSSES dataset with Doc2Vec streamlined!
 
 ## What is BIOSSES?
 
@@ -6,18 +6,18 @@ BIOSSES is short for [Biomedical Semantic Similarity Estimation System](https://
 
 The benchmark dataset is a table of 100 biomedical sentence pairs picked from the [TAC 2014 Biomedical Summarization Track Dataset](https://tac.nist.gov/2014/BiomedSumm/). Each sentence pair has been assigned integer similarity scores by 5 human expert annotators which are included in another table along with the [sentences](https://tabilab.cmpe.boun.edu.tr/BIOSSES/DataSet.html). 
 
-## What does **biosses-doc2vec** do?
+## What does **biosses_d2v** do?
 
-**biosses-doc2vec** implements the paragraph vector approach ([Le & Mikolov, 2014](https://arxiv.org/pdf/1405.4053.pdf)) to benchmarking BIOSSES sentences. 
+**biosses_d2v** implements the paragraph vector approach ([Le & Mikolov, 2014](https://arxiv.org/pdf/1405.4053.pdf)) to benchmarking BIOSSES sentences. 
 
-**biosses-doc2vec** uses the Doc2Vec model library from Gensim as it is the only popular open-source implementation of the paragraph vector model in Python as of now ([documentation](https://radimrehurek.com/gensim/models/doc2vec.html)).
+**biosses_d2v** uses the Doc2Vec model library from Gensim as it is the only popular open-source implementation of the paragraph vector model in Python as of now ([documentation](https://radimrehurek.com/gensim/models/doc2vec.html)).
 
-**biosses-doc2vec** also implements the training corpus for Doc2Vec, which is the PubMed Central Open Access (PMCOA) Subset of biomedical papers – part of which the original BIOSSES paragraph vectors were trained on. Different levels of granularity are available via a FTP server to download corpus text (see [this](https://www.ncbi.nlm.nih.gov/pmc/tools/ftp/)); **biosses-doc2vec** enforces bulk downloads (i.e. not by individual papers) of Commercial and Non-Commercial packages.
-  > **biosses-doc2vec** treats each paper from the PMCOA Subset as a document with a vector to train.
+**biosses_d2v** also implements the training corpus for Doc2Vec, which is the PubMed Central Open Access (PMCOA) Subset of biomedical papers – part of which the original BIOSSES paragraph vectors were trained on. Different levels of granularity are available via a FTP server to download corpus text (see [this](https://www.ncbi.nlm.nih.gov/pmc/tools/ftp/)); **biosses_d2v** enforces bulk downloads (i.e. not by individual papers) of Commercial and Non-Commercial packages.
+  > **biosses_d2v** treats each paper from the PMCOA Subset as a document with a vector to train.
   
-Finally, **`biosses-doc2vec.py`** can be used in the CLI to execute both the training and benchmarking with just one line of code.
+Finally, **`biosses_d2v.py`** can be used in the CLI to execute both the training and benchmarking with just one line of code.
 
-## What are the classes in **biosses-doc2vec** for?
+## What are the classes in **biosses_d2v** for?
 
 ### **PMCOASubsetCorpus**:
 
@@ -59,7 +59,15 @@ pip install -r requirements.txt
 
 ## CLI Demo:
 
-![biosses-d2v demo](https://media.giphy.com/media/kWsp4ghLZYTtjvSxCh/source.gif?cid=790b76119fa15a6b2f4d386556779cd8dccef60873bc24b5&rid=source.gif&ct=g)'
+![biosses_d2v demo](https://media.giphy.com/media/kWsp4ghLZYTtjvSxCh/source.gif?cid=790b76119fa15a6b2f4d386556779cd8dccef60873bc24b5&rid=source.gif&ct=g)'
+
+Commands used:
+
+`python biosses_d2v.py --use-logger --save-model -s 100 --e 1 --iterator`
+  > Train Doc2Vec on a corpus of 100 non-lemmatized PMCOA papers over 1 epoch, streaming the texts in one by one, logging training progress and saving the model.
+
+`python biosses_d2v.py --use-logger --save-model -s 100 --e 1 --lemma`
+  > Train Doc2Vec on a corpus of 100 lemmatized PMCOA papers over 1 epoch, storing the texts as a list in memory, logging training progress and saving the model.
 
 ## [Interactive Demo](./biosses_d2v_demo.ipynb)
 
@@ -69,7 +77,7 @@ pip install -r requirements.txt
 2. Data structures to store training corpus.
 3. Text preprocessing. 
   > Lemmatization engine (currenty using scispacy); stopword choices; regex patterns to remove unwanted features (could try r"(\s+\(*(([À-ÿA-Za-z\s\-.,;&])+\s\(*(\d{4}[a-z]*)+\)*)+)|(\s+\[[\d\s+,;&\[\]]+\])" for getting rid of majority of in-text citations), etc.
-4. Should a `TaggedDocument` be another unit of text but an entire paper like now? Maybe try a single paragraph?
+4. Should a `TaggedDocument` be another unit of text but an entire paper like now? Maybe try a single paragraph? Or sentence?
 5. Other metrics to benchmark by.
 6. Other corpora to train Doc2Vec on.
 7. Other Doc2Vec implementations.

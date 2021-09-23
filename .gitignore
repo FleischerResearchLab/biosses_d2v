@@ -6,7 +6,7 @@ venv
 BIOSSES-Dataset*
 
 # Model directories
-biod2v*
+biod2v_*
 model
 
 # Mischellaneous
